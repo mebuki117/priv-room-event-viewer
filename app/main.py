@@ -15,11 +15,11 @@ UPDATE_INTERVAL = 5.0
 
 EVENT_ORDER = {
     'story.enter_the_nether': (6, 'Enter Nether'),
-    'nether.find_bastion': (5, 'Find Bastion'),
-    'nether.find_fortress': (4, 'Find Fortress'),
+    'nether.find_bastion': (5, 'Enter Bastion'),
+    'nether.find_fortress': (4, 'Enter Fortress'),
     'projectelo.timeline.blind_travel': (3, 'Blind Travel'),
-    'story.follow_ender_eye': (2, 'Follow Ender Eye'),
-    'story.enter_the_end': (1, 'Enter The End'),
+    'story.follow_ender_eye': (2, 'Eye Spy'),
+    'story.enter_the_end': (1, 'Enter End'),
 }
 
 COMPLETION_ORDER = 0
@@ -154,7 +154,7 @@ def build_player_rows(data):
                 rows.append({
                     'uuid': uuid,
                     'nickname': nickname,
-                    'event': 'Completion',
+                    'event': 'Finish',
                     'time': format_time(completion_time),
                     'raw_time': completion_time,
                     'event_order': COMPLETION_ORDER,
@@ -202,8 +202,8 @@ class LiveMatchApp:
     def __init__(self, root):
         self.root = root
         self.root.title('Priv-Room Event Viewer')
-        self.root.geometry('760x700')
-        self.root.minsize(600, 400)
+        self.root.geometry('500x500')
+        self.root.minsize(500, 200)
 
         self.api_key = None
         self.username = None
@@ -272,10 +272,10 @@ class LiveMatchApp:
         self.tree.heading('event', text='Event')
         self.tree.heading('time', text='Time')
 
-        self.tree.column('rank', width=55, minwidth=45, anchor='center', stretch=False)
-        self.tree.column('nickname', width=220, minwidth=120, anchor='w')
-        self.tree.column('event', width=260, minwidth=160, anchor='w')
-        self.tree.column('time', width=100, minwidth=80, anchor='center', stretch=False)
+        self.tree.column('rank', width=45, minwidth=40, anchor='center', stretch=False)
+        self.tree.column('nickname', width=100, minwidth=80, anchor='w')
+        self.tree.column('event', width=100, minwidth=80, anchor='w')
+        self.tree.column('time', width=75, minwidth=65, anchor='center', stretch=False)
 
         scrollbar = ttk.Scrollbar(
             frame,
