@@ -14,6 +14,9 @@ CONFIG_FILE = Path(__file__).with_name('config.json')
 UPDATE_INTERVAL = 5.0
 
 EVENT_ORDER = {
+    'projectelo.timeline.forfeit': (9, 'Forfeit'),
+    'projectelo.timeline.reset': (8, 'Reset'),
+    'projectelo.timeline.death': (7, 'Death'),
     'story.enter_the_nether': (6, 'Enter Nether'),
     'nether.find_bastion': (5, 'Enter Bastion'),
     'nether.find_fortress': (4, 'Enter Fortress'),
@@ -38,8 +41,6 @@ def load_config():
     api_key = str(config.get('api_key', '')).strip()
     username = str(config.get('username', '')).strip()
 
-    if not api_key:
-        raise ValueError('config.json の api_key が空です。')
     if not username:
         raise ValueError('config.json の username が空です。')
 
@@ -56,13 +57,15 @@ def load_config():
 
 def format_time(milliseconds):
     try:
-        total_seconds = max(0, int(milliseconds) // 1000)
+        milliseconds = max(0, int(milliseconds))
     except (TypeError, ValueError):
-        return '--:--'
+        return '--:--.---'
 
-    minutes = total_seconds // 60
-    seconds = total_seconds % 60
-    return f'{minutes:02d}:{seconds:02d}'
+    minutes = milliseconds // 60000
+    seconds = (milliseconds % 60000) // 1000
+    millis = milliseconds % 1000
+
+    return f'{minutes:02d}:{seconds:02d}.{millis:03d}'
 
 
 def choose_latest_timeline(timelines):
@@ -321,12 +324,16 @@ class LiveMatchApp:
         try:
             url = BASE_URL.format(self.username)
 
+            headers = {
+                "Accept": "application/json",
+            }
+
+            if self.api_key:
+                headers["Private-Key"] = self.api_key
+
             response = requests.get(
                 url,
-                headers={
-                    'Private-Key': self.api_key,
-                    'Accept': 'application/json',
-                },
+                headers=headers,
                 timeout=10,
             )
 
