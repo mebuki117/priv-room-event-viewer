@@ -14,18 +14,18 @@ CONFIG_FILE = Path(__file__).with_name('config.json')
 UPDATE_INTERVAL = 5.0
 
 EVENT_ORDER = {
-    'projectelo.timeline.forfeit': (9, 'Forfeit'),
-    'projectelo.timeline.reset': (8, 'Reset'),
-    'projectelo.timeline.death': (7, 'Death'),
-    'story.enter_the_nether': (6, 'Enter Nether'),
+    'projectelo.timeline.forfeit': (1, 'Forfeit'),
+    'projectelo.timeline.reset': (2, 'Reset'),
+    'projectelo.timeline.death': (3, 'Death'),
+    'story.enter_the_nether': (4, 'Enter Nether'),
     'nether.find_bastion': (5, 'Enter Bastion'),
-    'nether.find_fortress': (4, 'Enter Fortress'),
-    'projectelo.timeline.blind_travel': (3, 'Blind Travel'),
-    'story.follow_ender_eye': (2, 'Eye Spy'),
-    'story.enter_the_end': (1, 'Enter End'),
+    'nether.find_fortress': (6, 'Enter Fortress'),
+    'projectelo.timeline.blind_travel': (7, 'Blind Travel'),
+    'story.follow_ender_eye': (8, 'Eye Spy'),
+    'story.enter_the_end': (9, 'Enter End'),
 }
 
-COMPLETION_ORDER = 0
+COMPLETION_ORDER = 10
 
 
 def load_config():
@@ -73,6 +73,7 @@ def choose_latest_timeline(timelines):
 
     for event in timelines or []:
         event_type = event.get('type')
+
         if event_type not in EVENT_ORDER:
             continue
 
@@ -82,12 +83,32 @@ def choose_latest_timeline(timelines):
             continue
 
         order, display_name = EVENT_ORDER[event_type]
-        candidates.append((order, event_time, display_name, event_type))
+
+        candidates.append(
+            (order, event_time, display_name, event_type)
+        )
 
     if not candidates:
         return None
 
-    return max(candidates, key=lambda x: (x[0], x[1]))
+    event_groups = {}
+
+    for candidate in candidates:
+        event_type = candidate[3]
+        event_groups.setdefault(event_type, []).append(candidate)
+
+    numbered_candidates = []
+
+    for event_type, events in event_groups.items():
+        events.sort(key=lambda x: x[1])
+
+        for number, event in enumerate(events, start=1):
+            numbered_candidates.append(event + (number,))
+
+    return max(
+        numbered_candidates,
+        key=lambda x: (x[1], x[0])
+    )
 
 
 def build_player_rows(data):
@@ -173,13 +194,17 @@ def build_player_rows(data):
                 'event': 'Waiting',
                 'time': '--:--',
                 'raw_time': -1,
-                'event_order': -1,
+                'event_order': 3.5,
             })
             continue
 
-        event_order, raw_time, display_name, event_type = latest
+        event_order, raw_time, display_name, event_type, event_number = latest
 
-        raw_time = latest[1]
+        if event_type in (
+            'projectelo.timeline.death',
+            'projectelo.timeline.reset',
+        ) and event_number >= 2:
+            display_name = f'{display_name} #{event_number}'
 
         rows.append({
             'uuid': uuid,
@@ -192,12 +217,11 @@ def build_player_rows(data):
 
     rows.sort(
         key=lambda row: (
-            row['event_order'],
-            -row['raw_time'],
-            row['nickname'].lower(),
+            -row["event_order"],
+            row["raw_time"],
+            row["nickname"].lower(),
         )
     )
-
     return rows
 
 
