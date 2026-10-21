@@ -28,6 +28,15 @@ EVENT_ORDER = {
 COMPLETION_ORDER = 10
 
 
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / 'data'
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+EVENT_FILE = DATA_DIR / 'events.txt'
+NAME_WIDTH = 10
+EVENT_WIDTH = 14
+
+
 def load_config():
     if not CONFIG_FILE.exists():
         raise FileNotFoundError(
@@ -52,7 +61,56 @@ def load_config():
 
     interval = max(1.2, interval)
 
-    return api_key, username, interval
+    output_file = config.get('output_file', True)
+    output_file_name = str(
+        config.get('output_filename', 'events.txt')
+    ).strip()
+
+    if not output_file_name:
+        output_file_name = 'events.txt'
+
+    try:
+        name_width = max(1, int(config.get('name_width', 10)))
+    except (TypeError, ValueError):
+        name_width = 10
+
+    try:
+        event_width = max(1, int(config.get('event_width', 14)))
+    except (TypeError, ValueError):
+        event_width = 14
+
+    output_mode = str(config.get('output_mode', 'all')).strip().lower()
+    if output_mode not in ('event', 'all', 'completion'):
+        output_mode = 'all'
+
+    try:
+        rank_start = max(1, int(config.get('rank_start', 1)))
+    except (TypeError, ValueError):
+        rank_start = 1
+
+    try:
+        rank_end = max(rank_start, int(config.get('rank_end', 15)))
+    except (TypeError, ValueError):
+        rank_end = max(rank_start, 15)
+
+    try:
+        rank_width = max(2, int(config.get('rank_width', 3)))
+    except (TypeError, ValueError):
+        rank_width = 3
+
+    return (
+        api_key,
+        username,
+        interval,
+        output_file,
+        output_file_name,
+        name_width,
+        event_width,
+        output_mode,
+        rank_start,
+        rank_end,
+        rank_width,
+    )
 
 
 def format_time(milliseconds):
@@ -246,10 +304,29 @@ class LiveMatchApp:
         self.room_var = tk.StringVar(value='')
         self.count_var = tk.StringVar(value='0 players')
 
+        self.room_var = tk.StringVar(value='Match Time --:--')
+
         self.create_widgets()
 
         try:
-            self.api_key, self.username, self.update_interval = load_config()
+            (
+                self.api_key,
+                self.username,
+                self.update_interval,
+                self.output_file,
+                output_file_name,
+                name_width,
+                event_width,
+                self.output_mode,
+                self.rank_start,
+                self.rank_end,
+                self.rank_width,
+            ) = load_config()
+
+            global EVENT_FILE, NAME_WIDTH, EVENT_WIDTH
+            EVENT_FILE = DATA_DIR / Path(output_file_name).name
+            NAME_WIDTH = name_width
+            EVENT_WIDTH = event_width
         except Exception as e:
             self.status_var.set('Configuration error')
             self.root.after(100, lambda: messagebox.showerror(
@@ -258,7 +335,6 @@ class LiveMatchApp:
             ))
             return
 
-        self.room_var.set(f'Room Host: {self.username}')
         self.status_var.set(
             f'Updating every {self.update_interval:g}s'
         )
@@ -375,9 +451,31 @@ class LiveMatchApp:
 
             rows = build_player_rows(data)
 
+            match_time_ms = data.get('time', 0)
+
+            try:
+                match_time_ms = max(0, int(match_time_ms))
+            except (TypeError, ValueError):
+                match_time = '--:--'
+            else:
+                minutes = match_time_ms // 60000
+                seconds = (match_time_ms % 60000) // 1000
+                match_time = f'{minutes:02d}:{seconds:02d}'
+
+            if self.output_file:
+                export_top_n(
+                    rows,
+                    data,
+                    mode=self.output_mode,
+                    rank_start=self.rank_start,
+                    rank_end=self.rank_end,
+                    rank_width=self.rank_width,
+                    output_file=EVENT_FILE,
+                )
+
             self.root.after(
                 0,
-                lambda: self.apply_rows(rows)
+                lambda: self.apply_rows(rows, match_time)
             )
 
         except requests.RequestException as e:
@@ -398,7 +496,7 @@ class LiveMatchApp:
         finally:
             self.root.after(0, self.fetch_finished)
 
-    def apply_rows(self, rows):
+    def apply_rows(self, rows, match_time):
         if not self.running:
             return
 
@@ -429,6 +527,8 @@ class LiveMatchApp:
         self.last_update = time.time()
         self.last_error = None
 
+        self.room_var.set(f'Match Time {match_time}')
+
         now = time.strftime('%H:%M:%S')
         self.status_var.set(
             f'Last update: {now}  |  Next update: {self.update_interval:g}s'
@@ -455,6 +555,124 @@ class LiveMatchApp:
     def close(self):
         self.running = False
         self.root.destroy()
+
+
+def format_fixed_width(value, width):
+    value = str(value)
+    return value[:width].ljust(width)
+
+
+def export_top_n(
+    rows,
+    data,
+    mode='event',
+    rank_start=1,
+    rank_end=5,
+    rank_width=2,
+    output_file='events.txt',
+):
+    """
+    mode:
+        'event'      : Completion以外
+        'all'        : Completionを含む全イベント
+        'completion' : Completionのみ
+
+    rank_start: 出力開始順位（1始まり）
+    rank_end:   出力終了順位（両端を含む）
+    rank_width: 順位表示の幅（#を含む）
+    output_file: 出力先ファイル
+    """
+
+    if mode not in ('event', 'all', 'completion'):
+        raise ValueError(
+            "mode は 'event', 'all', 'completion' のいずれかを指定してください。"
+        )
+
+    if rank_start < 1 or rank_end < rank_start:
+        raise ValueError('順位の範囲が不正です。')
+
+    if rank_width < 2:
+        raise ValueError('rank_width は2以上を指定してください。')
+
+    nickname_by_uuid = {
+        player.get('uuid'): player.get(
+            'nickname',
+            player.get('uuid')
+        )
+        for player in data.get('players', [])
+        if player.get('uuid')
+    }
+
+    completions = []
+
+    for completion in data.get('completions', []):
+        uuid = completion.get('uuid')
+
+        try:
+            completion_time = int(completion.get('time', 0))
+        except (TypeError, ValueError):
+            continue
+
+        completions.append({
+            'uuid': uuid,
+            'nickname': nickname_by_uuid.get(
+                uuid, uuid or 'Unknown'
+            ),
+            'event': 'Finish',
+            'time': format_time(completion_time),
+            'raw_time': completion_time,
+            'event_order': COMPLETION_ORDER,
+        })
+
+    if mode == 'completion':
+        target_rows = completions
+
+    elif mode == 'event':
+        target_rows = [
+            row for row in rows
+            if row['event'] != 'Finish'
+        ]
+
+    else:
+        target_rows = [
+            row for row in rows
+            if row['event'] != 'Finish'
+        ] + completions
+
+    target_rows.sort(
+        key=lambda row: (
+            -row['event_order'],
+            row['raw_time'],
+            row['nickname'].lower(),
+        )
+    )
+
+    target_rows = target_rows[rank_start - 1:rank_end]
+
+    lines = []
+
+    for i, row in enumerate(target_rows, start=rank_start):
+        rank = f'#{i:<{rank_width - 1}}'
+
+        name = format_fixed_width(
+            row['nickname'],
+            NAME_WIDTH
+        )
+
+        event = format_fixed_width(
+            row['event'],
+            EVENT_WIDTH
+        )
+
+        lines.append(
+            f'{rank} {name} {event} {row["time"]}'
+        )
+
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open('w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
 
 
 def main():

@@ -1,5 +1,13 @@
 {
     "api_key": "abcd1234",
     "username": "mcid",
-    "update_interval": 10
+    "update_interval": 10,
+    "output_file": true,
+    "output_filename": "events.txt",
+    "output_mode": "all",
+    "rank_start": 1,
+    "rank_end": 5,
+    "rank_width": 2,
+    "name_width": 10,
+    "event_width": 14
 }
