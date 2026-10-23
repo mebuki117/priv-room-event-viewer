@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+import sys
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -28,9 +29,15 @@ EVENT_ORDER = {
 COMPLETION_ORDER = 10
 
 
-BASE_DIR = Path(__file__).resolve().parent
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+
+CONFIG_FILE = BASE_DIR / 'config.json'
 DATA_DIR = BASE_DIR / 'data'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 EVENT_FILE = DATA_DIR / 'events.txt'
 NAME_WIDTH = 10

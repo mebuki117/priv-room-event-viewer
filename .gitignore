@@ -2,3 +2,6 @@
 /app/res_example
 /app/test.py
 /app/data
+/build
+/dist
+*.spec
