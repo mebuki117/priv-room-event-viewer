@@ -10,7 +10,6 @@ import requests
 
 
 BASE_URL = 'https://api.mcsrranked.com/users/{}/live'
-CONFIG_FILE = Path(__file__).with_name('config.json')
 
 UPDATE_INTERVAL = 5.0
 
@@ -463,13 +462,16 @@ class LiveMatchApp:
             try:
                 match_time_ms = max(0, int(match_time_ms))
             except (TypeError, ValueError):
+                match_time_ms = 0
                 match_time = '--:--'
             else:
                 minutes = match_time_ms // 60000
                 seconds = (match_time_ms % 60000) // 1000
                 match_time = f'{minutes:02d}:{seconds:02d}'
 
-            if self.output_file:
+            room_status = str(data.get('status', '')).strip().lower()
+
+            if self.output_file and room_status != 'idle':
                 export_top_n(
                     rows,
                     data,
